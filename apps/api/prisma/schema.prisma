@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PARTICIPANT
+  HOST
+  ADMIN
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum ParticipantStatus {
+  WAITING
+  ADMITTED
+  DENIED
+  REMOVED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(PARTICIPANT)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  hostedMeetings   Meeting[]
+  invitations      Invitation[]
+  participations   MeetingParticipant[]
+  attendances      Attendance[]
+  chatMessages     ChatMessage[]
+  polls            Poll[]
+  votes            Vote[]
+  moderationEvents ModerationEvent[]
+  auditLogs        AuditLog[]
+
+  @@index([role])
+}
+
+model Meeting {
+  id                 String        @id @default(cuid())
+  title              String
+  description        String?
+  hostId             String
+  host               User          @relation(fields: [hostId], references: [id], onDelete: Restrict)
+  scheduledStart     DateTime
+  scheduledEnd       DateTime?
+  status             MeetingStatus @default(SCHEDULED)
+  waitingRoomEnabled Boolean       @default(true)
+  moderationEnabled  Boolean       @default(true)
+  startedAt          DateTime?
+  endedAt            DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  invitations      Invitation[]
+  participants     MeetingParticipant[]
+  attendances      Attendance[]
+  chatMessages     ChatMessage[]
+  polls            Poll[]
+  moderationEvents ModerationEvent[]
+
+  @@index([hostId])
+  @@index([status, scheduledStart])
+}
+
+model Invitation {
+  id        String           @id @default(cuid())
+  meetingId String
+  meeting   Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  inviteeId String
+  invitee   User             @relation(fields: [inviteeId], references: [id], onDelete: Cascade)
+  status    InvitationStatus @default(PENDING)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([meetingId, inviteeId])
+  @@index([inviteeId, status])
+}
+
+model MeetingParticipant {
+  id         String            @id @default(cuid())
+  meetingId  String
+  meeting    Meeting           @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status     ParticipantStatus @default(WAITING)
+  admittedAt DateTime?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([meetingId, userId])
+  @@index([userId])
+}
+
+model Attendance {
+  id        String    @id @default(cuid())
+  meetingId String
+  meeting   Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime  @default(now())
+  leftAt    DateTime?
+
+  @@index([meetingId, userId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  meetingId String
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  flagged   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([meetingId, createdAt])
+  @@index([userId])
+}
+
+model Poll {
+  id          String       @id @default(cuid())
+  meetingId   String
+  meeting     Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  question    String
+  isOpen      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  options     PollOption[]
+  votes       Vote[]
+
+  @@index([meetingId])
+}
+
+model PollOption {
+  id     String @id @default(cuid())
+  pollId String
+  poll   Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  text   String
+  order  Int    @default(0)
+  votes  Vote[]
+
+  @@index([pollId])
+}
+
+model Vote {
+  id        String     @id @default(cuid())
+  pollId    String
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  optionId  String
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([pollId, userId])
+  @@index([optionId])
+}
+
+// Only the minimum needed for moderation and audit is stored: categories, score,
+// action taken and a MASKED excerpt. The original message text is not duplicated here.
+model ModerationEvent {
+  id         String   @id @default(cuid())
+  meetingId  String
+  meeting    Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories String[]
+  severity   String
+  score      Float
+  action     String
+  excerpt    String
+  createdAt  DateTime @default(now())
+
+  @@index([meetingId, createdAt])
+  @@index([userId])
+}
+
+// Single-row table (id = 1) holding the global, admin-editable moderation configuration.
+model ModerationSetting {
+  id             Int      @id @default(1)
+  enabled        Boolean  @default(true)
+  warnThreshold  Float    @default(0.4)
+  blockThreshold Float    @default(0.8)
+  customTerms    String[]
+  updatedAt      DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([action])
+}

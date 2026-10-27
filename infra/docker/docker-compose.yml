@@ -1,0 +1,30 @@
+# Starts PostgreSQL (required) and Redis (optional, not used by the current code).
+# Requires Docker Desktop. Run from the project root:  npm run db:up
+name: smai
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: smai
+      POSTGRES_PASSWORD: smai_dev_password
+      POSTGRES_DB: smai
+    ports:
+      - "5433:5432" # host port 5433 avoids clashing with a local PostgreSQL on 5432
+    volumes:
+      - smai_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smai -d smai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    container_name: smai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    profiles: ["redis"] # only starts with: docker compose --profile redis up -d
+volumes:
+  smai_pgdata:
