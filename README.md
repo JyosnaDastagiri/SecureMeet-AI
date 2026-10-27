@@ -1,6 +1,6 @@
 # SecureMeet AI — Intelligent and Secure Virtual Meeting Platform
 
-A final-year B.Tech project: a private video-meeting platform with in-app invitations, a waiting room, real-time chat / reactions / polls, rule-based chat moderation, attendance and engagement reports, and an administrator dashboard.
+A private video-meeting platform with in-app invitations, a waiting room, real-time chat / reactions / polls, rule-based chat moderation, attendance and engagement reports, and an administrator dashboard.
 
 | Layer | Technology |
 |---|---|
